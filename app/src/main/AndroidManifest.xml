@@ -19,7 +19,6 @@
         <activity android:name="com.lamer.android_rc_car.MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>

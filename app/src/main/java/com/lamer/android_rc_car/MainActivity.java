@@ -11,6 +11,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
 import android.view.MotionEvent;
+import android.view.SurfaceView;
 import android.view.VelocityTracker;
 import android.view.View;
 import android.view.Window;
@@ -47,13 +48,13 @@ public class MainActivity extends Activity {
 	boolean mouse=false;
 	float st_angle=95;
 	double d_angle=0;
-	int int_angle=95;//55 - 95 - 135
-	int int_acel=0;
+	static int int_angle=95;//55 - 95 - 135
+	static int int_acel=100;
 	private VelocityTracker mVelocityTracker = null;
 	private Timer mTimer;
 	private Timer connectTimer;
 	private TimerTask mTimerTask;
-	private RelativeLayout area;
+	private SurfaceView area;
 	private float centerX;
 	private float centerY;
 	private Timer rTimer;
@@ -64,6 +65,10 @@ public class MainActivity extends Activity {
     private BluetoothAdapter mBluetoothAdapter;
     private String mConnectedDeviceName;
     private TextView mTitle;
+    private int mAccel = 0;
+    private static final int RETURN = 0;
+    private static final int UP = 1;
+    private static final int BREAK = 2;
 
     @Override
     protected void onStart() {
@@ -140,89 +145,129 @@ public class MainActivity extends Activity {
 
         wheel=(ImageView)findViewById(R.id.whellView);
 
-		area = (RelativeLayout)findViewById(R.id.appLayout);
+		area = (SurfaceView)findViewById(R.id.textureView);
 		if(area!=null) {
-			centerX = area.getWidth() / 2;
+			centerX = area.getWidth() >> 1;
 
-			centerY = area.getHeight() / 2;
+			centerY = area.getHeight() >> 1;
 
-			area.setOnTouchListener(new View.OnTouchListener() {
+            area.setOnTouchListener(new View.OnTouchListener() {
 				private int acel_touch = -1;
 				private int wheel_touch = -1;
 
 				@Override
 				public boolean onTouch(View v, MotionEvent m) {
 					//Log.v("Touch","ACTION:"+event.getActionMasked()+" "+event.getPointerId(0)+" "+(event.getPointerCount()>1?event.getPointerId(1):"")+" "+event.getPointerCount());
-					int pointerCount = m.getPointerCount();
+//					int pointerCount = m.getPointerCount();
+//
+//					for (int i = 0; i < pointerCount; i++) {
+//						int x = (int) m.getX(i);
+//						int y = (int) m.getY(i);
+//						int id = m.getPointerId(i);
+//						int action = m.getActionMasked();
+//						int actionIndex = m.getActionIndex();
+//
+//						String actionString;
 
-					for (int i = 0; i < pointerCount; i++) {
-						int x = (int) m.getX(i);
-						int y = (int) m.getY(i);
-						int id = m.getPointerId(i);
-						int action = m.getActionMasked();
-						int actionIndex = m.getActionIndex();
-
-						String actionString;
-
-						switch (action)
+						switch (m.getAction())
 						{
 							case MotionEvent.ACTION_POINTER_DOWN:
 							case MotionEvent.ACTION_DOWN:
-								actionString = "DOWN";
-								if(wheel_touch == -1){
-									wheel_touch = id;
-									centerX = x;
-									actionString += " wheel";
+								//actionString = "DOWN";
+//								if(wheel_touch == -1){
+//									wheel_touch = id;
+									centerX = m.getX();
+									//actionString += " wheel";
                                     ReturnTimerStop();
-								}else if(acel_touch == -1 && id == actionIndex){
-									acel_touch = id;
-									centerY = y;
-									actionString += " acel";
-								}
+								//}
+//								else if(acel_touch == -1 && id == actionIndex){
+//									acel_touch = id;
+//									centerY = y;
+//									actionString += " acel";
+//								}
 								break;
-							case MotionEvent.ACTION_UP:
-								if(wheel_touch == id){
-									wheel_touch = -1;
+                            case MotionEvent.ACTION_POINTER_UP:
+                            case MotionEvent.ACTION_UP:
+								//if(wheel_touch == id){
+								//	wheel_touch = -1;
 									ReturnTimerStart();
-								}
-								if(acel_touch == id){
-									acel_touch = -1;
-								}
-								actionString = "UP";
+								//}
+//								if(acel_touch == id){
+//									acel_touch = -1;
+//								}
+								//actionString = "UP";
 								break;
-							case MotionEvent.ACTION_POINTER_UP:
-								if(wheel_touch == id && id == actionIndex){
-									wheel_touch = -1;
-									ReturnTimerStart();
-								}
-								if(acel_touch == id && id == actionIndex){
-									acel_touch = -1;
-								}
-								actionString = "POINTER_UP";
-								break;
+//							case MotionEvent.ACTION_POINTER_UP:
+//								if(wheel_touch == id && id == actionIndex){
+//									wheel_touch = -1;
+//									ReturnTimerStart();
+//								}
+////								if(acel_touch == id && id == actionIndex){
+////									acel_touch = -1;
+////								}
+//								actionString = "POINTER_UP";
+//								break;
 							case MotionEvent.ACTION_MOVE:
-								if(wheel_touch == id){
-									SetAngle(95 + (int) ((x - centerX) * 0.4));
-								}
-								if(acel_touch == id){
-									SetSpeed(int_acel - (int) ((y - centerY) * 0.02));
-								}
-								actionString = "MOVE";
+								//if(wheel_touch == id){
+									SetAngle(95 + (int) ((m.getX() - centerX) * 0.4));
+								//}
+//								if(acel_touch == id){
+//									SetSpeed(int_acel - (int) ((y - centerY) * 0.02));
+//								}
+								//actionString = "MOVE";
 								break;
 							default:
-								actionString = "";
+								//actionString = "";
 						}
 						//Log.v("Touch","ACTION:"+actionString+" Index: " + actionIndex + " ID: " + id + " X: " + x + " Y: " + y);
-					}
+					//}
 					return true;
 				}
 			});
 			//area.on
 		}
+        findViewById(R.id.accelView).setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()){
+                    case MotionEvent.ACTION_POINTER_DOWN:
+                    case MotionEvent.ACTION_DOWN:
+                        mAccel = UP;
+                        break;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_POINTER_UP:
+                        mAccel = RETURN;
+                        break;
+                    case MotionEvent.ACTION_MOVE:
+                    default:
+                        break;
+                }
+                return true;
+            }
+        });
+        findViewById(R.id.breakView).setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()){
+                    case MotionEvent.ACTION_POINTER_DOWN:
+                    case MotionEvent.ACTION_DOWN:
+                        mAccel = BREAK;
+                        break;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_POINTER_UP:
+                        mAccel = RETURN;
+                        break;
+                    case MotionEvent.ACTION_MOVE:
+                    default:
+                        break;
+                }
+                return true;
+            }
+        });
         ((SeekBar) findViewById(R.id.seekBar1)).setOnSeekBarChangeListener(new OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                int_acel=progress-100;
+                int_acel=progress;
             }
 
             @Override
@@ -263,7 +308,7 @@ public class MainActivity extends Activity {
                 case MESSAGE_STATE_CHANGE:
                     switch (msg.arg1) {
                         case BluetoothCommandService.STATE_CONNECTED:
-                            car.write("#1#"+(190-int_angle)+"#2#"+int_acel);
+                            //car.write("#1#"+(190-int_angle)+"#2#"+int_acel);
                             runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
@@ -379,9 +424,31 @@ public class MainActivity extends Activity {
 		{
 			rTimerTask = new TimerTask()
 			{
-				@Override
+                private int nAccel;
+
+                @Override
 				public void run()
 				{
+				    nAccel = ((SeekBar)findViewById(R.id.seekBar1)).getProgress();
+				    switch (mAccel){
+                        case RETURN:
+                            if(int_acel!=nAccel){
+                                if((int_acel-nAccel)/2.0>5) {
+                                    SetSpeed((int) (nAccel+((int_acel-nAccel)/2.0)));
+                                }else SetSpeed(nAccel);
+                            }
+                            break;
+                        case UP:
+                            if(int_acel<195){
+                                SetSpeed((int) (int_acel+(200-int_acel)/2.0));
+                            }else SetSpeed(200);
+                            break;
+                        case BREAK:
+                            if(int_acel>0){
+                                SetSpeed((int) (int_acel-int_acel/4.0));
+                            }else SetSpeed(0);
+                            break;
+                    }
 					if(!returnToZero)return;
 					if((int_angle-95.0)/2.0>5) {
 						SetAngle(95 + (int_angle - 95) / 2);
@@ -400,12 +467,14 @@ public class MainActivity extends Activity {
 	public void SetSpeed(int a){
 		if(a!=int_acel){
 			int_acel=a;
-			((SeekBar)findViewById(R.id.seekBar1)).setProgress(a+100);
+			//((SeekBar)findViewById(R.id.seekBar1)).setProgress(a+100);
 			//			try {
 			//if(car.getState()!=BluetoothCommandService.STATE_CONNECTED)connectToCar();
 		}
 	}
 	public void SetAngle(int a){
+        if(a<55)a=55;
+        if(a>135)a=135;
 		if(a!=int_angle){
 			int_angle=a;
             //if(car.getState()!=BluetoothCommandService.STATE_CONNECTED)connectToCar();

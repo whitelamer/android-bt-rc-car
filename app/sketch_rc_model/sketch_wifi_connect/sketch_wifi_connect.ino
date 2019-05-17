@@ -2,6 +2,11 @@
 #include <WiFiEspUdp.h>
 #include <Servo.h>
 
+#ifndef HAVE_HWSERIAL1
+#include "SoftwareSerial.h"
+SoftwareSerial Serial1(6, 7); // RX, TX
+#endif
+
 int ch1_pos = 95;//55-95-135
 int ch2_pos = 2000;
 //#include "AFmotor/AFMotor.h"
@@ -13,6 +18,7 @@ char pass[] = "rootms123";        // your network password
 int status = WL_IDLE_STATUS;     // the Wifi radio's status
 boolean haveSSID = false;
 unsigned int localPort = 8888;  // local port to listen on
+unsigned int remotePort = 8889;  // local port to listen on
 
 char packetBuffer[255];          // buffer to hold incoming packet
 char ReplyBuffer[] = "ACK";      // a string to send back
@@ -39,7 +45,7 @@ void setup() {
   printMacAddress();
   listNetworks();
   if(haveSSID==true)connectToNet();
-  if (WiFi.status() == WL_CONNECTED)Udp.begin(localPort);
+  UdpUp();
   
   ch1_servo.attach(9);
   ch1_servo.write(ch1_pos);
@@ -51,7 +57,7 @@ void setup() {
 void loop()
 {
   // scan for existing networks
-  yield();
+  //yield();
   int packetSize = Udp.parsePacket();
   if (packetSize) {
     Serial.print("Received packet of size ");
@@ -69,19 +75,27 @@ void loop()
     }
     Serial.println("Contents:");
     Serial.println(packetBuffer);
-    for(int i=0;i<len;i++){
+    for(int i=0;i<len;++i){
       if (packetBuffer[i] == 35) {
-        int incomingByte = packetBuffer[++i]-49;
+        int incomingByte = packetBuffer[++i]-48;
+        Serial.print("i ");
+        Serial.println(i);
+        Serial.print("incomingByte ");
+        Serial.println(incomingByte);
         if (incomingByte == 1) {
           if (packetBuffer[++i] == 35) {
             ch1_pos = 0;
-            int k=100;
-            while(packetBuffer[++i]!=35 || i>=len){
-              ch1_pos += (packetBuffer[i]-49)*k;
-              k/=10;
+            String value;
+            i++;
+            //int k=100;
+            while(packetBuffer[i]!=35 && packetBuffer[i]!=0){
+              value+=packetBuffer[i++];
+              //ch1_pos += (packetBuffer[i]-48)*k;
+              //k/=10;
             }
-            ch1_pos/=(k*10);
-            
+            ch1_pos=value.toInt();
+            //ch1_pos/=(k*10);
+            i--;
             if(ch1_pos<55)ch1_pos=55;
             if(ch1_pos>135)ch1_pos=135;
             Serial.print("chanel1 get ");
@@ -91,14 +105,18 @@ void loop()
         } else if (incomingByte == 2) {
           if (packetBuffer[++i] == 35) {
             ch2_pos = 0;
-            int k=100;
-            while(packetBuffer[++i]!=35 || i>=len){
-              ch2_pos += (packetBuffer[i]-49)*k;
-              k/=10;
+            String value;
+            i++;
+            while(packetBuffer[i]!=35 && packetBuffer[i]!=0){
+              value+=packetBuffer[i++];
             }
-            ch2_pos/=(k*10);
-            if(ch2_pos<-100)ch2_pos=-100;
-            if(ch2_pos>100)ch2_pos=100;
+            ch2_pos=value.toInt();
+            Serial.print("i: ");
+            Serial.println(i);
+            i--;
+            if(ch2_pos<0)ch2_pos=0;
+            if(ch2_pos>200)ch2_pos=200;
+            ch2_pos -= 100;
             //ch2_pos = Serial.parseInt();
             Serial.print("chanel2 get ");
             Serial.print(ch2_pos);
@@ -111,17 +129,27 @@ void loop()
       }
     }
     // send a reply, to the IP address and port that sent us the packet we received
-    Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
+    Udp.beginPacket(Udp.remoteIP(), remotePort);
     Udp.write(ReplyBuffer);
     Udp.endPacket();
   }else{
     if (WiFi.status() != WL_CONNECTED) {
       haveSSID = false;
+      Udp.stop();
       listNetworks();
-      if(haveSSID==true)
+      if(haveSSID==true){
         connectToNet();
-      else
+        UdpUp();
+      }else
         delay(1000);
+    }else{
+//      long rssi = WiFi.RSSI();
+//      Serial.print("signal strength (RSSI):");
+//      Serial.print(rssi);
+//      Serial.println(" dBm");
+      //yield();
+
+      delay(100);
     }
   }
   
@@ -131,7 +159,7 @@ void loop()
 }
 
 void connectToNet(){
-  while ( status != WL_CONNECTED) {
+  while ( WiFi.status() != WL_CONNECTED) {
     Serial.print("Attempting to connect to WPA SSID: ");
     Serial.println(ssid);
     // Connect to WPA/WPA2 network
@@ -140,7 +168,19 @@ void connectToNet(){
   Serial.println("Connected to wifi");
   printWifiStatus();
 }
-
+void UdpUp(){
+  if (WiFi.status() == WL_CONNECTED){
+    Serial.print("UDP upping on port:");
+    Serial.println(localPort);
+    //Udp.begin(localPort);
+    while (! Udp.begin(localPort) ) {                             // UDP protocol connected to localPort which is a variable
+      Serial.print("+");
+      yield();                                                    // Play nicely with RTOS (alias = delay(0))
+    }
+    Serial.println("*UP*");
+    //Udp.listen(localPort)
+  }
+}
 void printMacAddress()
 {
   // get your MAC address

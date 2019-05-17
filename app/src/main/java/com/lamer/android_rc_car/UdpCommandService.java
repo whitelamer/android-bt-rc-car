@@ -19,10 +19,11 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.util.Arrays;
 
 public class UdpCommandService extends CommandService {
     // Debugging
-    private static final String TAG = "BluetoothCommandService";
+    private static final String TAG = "UDPCommandService";
     private static final boolean D = true;
     private final Handler mHandler;
     private final Context mContext;
@@ -100,10 +101,10 @@ public class UdpCommandService extends CommandService {
 
     /**
      * Start the ConnectedThread to begin managing a Bluetooth connection
-     * @param socket  The BluetoothSocket on which the connection was made
-     * @param device  The BluetoothDevice that has been connected
+     * @param ip  The ip on which the connection was made
+     * @param port  The port that has been connected
      */
-    public synchronized void connected(BluetoothSocket socket, BluetoothDevice device) {
+    public synchronized void connected(String ip, int port) {
         if (D) Log.d(TAG, "connected");
 
         // Cancel the thread that completed the connection
@@ -113,20 +114,15 @@ public class UdpCommandService extends CommandService {
         if (mConnectedThread != null) {mConnectedThread.cancel(); mConnectedThread = null;}
 
         // Start the thread to manage the connection and perform transmissions
-        mConnectedThread = new ConnectedThread(socket);
+        mConnectedThread = new ConnectedThread(ip,port);
         mConnectedThread.start();
 
         // Send the name of the connected device back to the UI Activity
         Message msg = mHandler.obtainMessage(MESSAGE_DEVICE_NAME);
         Bundle bundle = new Bundle();
-        bundle.putString(DEVICE_NAME, device.getName());
+        bundle.putString(DEVICE_NAME, ip+":"+port);
         msg.setData(bundle);
         mHandler.sendMessage(msg);
-
-        // save connected device
-        //mSavedDevice = device;
-        // reset connection lost count
-        //mConnectionLostCount = 0;
 
         setState(STATE_CONNECTED);
     }
@@ -158,6 +154,7 @@ public class UdpCommandService extends CommandService {
         }
         // Perform the write unsynchronized
         r.write(out.getBytes());
+        Log.v(TAG, "write message ["+ out +"] to car");
     }
 
 
@@ -219,6 +216,7 @@ public class UdpCommandService extends CommandService {
 //
 //          connect(mSavedDevice);
 //        } else {
+        if(mState == STATE_NONE)return;
         setState(STATE_LISTEN);
         // Send a failure message back to the Activity
         Message msg = mHandler.obtainMessage(MESSAGE_TOAST);
@@ -239,12 +237,16 @@ public class UdpCommandService extends CommandService {
         private BroadcastListener listener;
         private DatagramSocket socket;
         private static final int PORT = 8888;
+        private static final int INPORT = 8889;
 
         public ConnectThread(){
             this.listener = new BroadcastListener() {
                 @Override
                 public void onReceive(String msg, String ip) {
                     Log.v(TAG, "receive message "+msg+" from "+ip);
+                    if(msg!=null && msg.contains("ACK")){
+                        connected(ip,PORT);
+                    }
                 }
             };
             WifiManager wifiMgr = (WifiManager) mContext.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
@@ -256,7 +258,7 @@ public class UdpCommandService extends CommandService {
 
         public void send(){
             try {
-                send("#1#0#2#0");
+                send("#1#95#2#100");
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -266,19 +268,20 @@ public class UdpCommandService extends CommandService {
             clientSocket.setBroadcast(true);
             byte[] sendData = msg.getBytes();
             DatagramPacket sendPacket = new DatagramPacket(
-                    sendData, sendData.length, InetAddress.getByName("192.168.1.2"), PORT);//getBroadcastAddress()
+                    sendData, sendData.length, getBroadcastAddress(), PORT);//getBroadcastAddress()
+            //InetAddress.getByName("192.168.1.255")
             clientSocket.send(sendPacket);
         }
 
         @Override
         public void run() {
             try {
-                socket = new DatagramSocket(PORT);
+                socket = new DatagramSocket(INPORT);
             } catch (SocketException e) {
                 e.printStackTrace();
             }
             try {
-                send("#1#0#2#0");
+                send("#1#95#2#100");
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -323,47 +326,52 @@ public class UdpCommandService extends CommandService {
      * It handles all incoming and outgoing transmissions.
      */
     private class ConnectedThread extends Thread {
-        private final BluetoothSocket mmSocket;
-        private final InputStream mmInStream;
-        private final OutputStream mmOutStream;
+        private final String ipAddress;
+        private final int port;
+        private DatagramSocket socket;
+        private BroadcastListener listener;
+        private static final int INPORT = 8889;
 
-        public ConnectedThread(BluetoothSocket socket) {
+        public ConnectedThread(String ip,int port) {
             Log.d(TAG, "create ConnectedThread");
-            mmSocket = socket;
-            InputStream tmpIn = null;
-            OutputStream tmpOut = null;
-
-            // Get the BluetoothSocket input and output streams
-            try {
-                tmpIn = socket.getInputStream();
-                tmpOut = socket.getOutputStream();
-            } catch (IOException e) {
-                Log.e(TAG, "temp sockets not created", e);
-            }
-
-            mmInStream = tmpIn;
-            mmOutStream = tmpOut;
+            ipAddress = ip;
+            this.port = port;
+            this.listener = new BroadcastListener() {
+                @Override
+                public void onReceive(String msg, String ip) {
+                    Log.v(TAG, "receive message "+msg+" from "+ip);
+                    if(msg!=null && msg.contains("ACK")){
+                        mHandler.obtainMessage(MESSAGE_READ, msg.length(), -1, msg)
+                                .sendToTarget();
+                    }else{
+                        connectionLost();
+                    }
+                }
+            };
         }
 
         public void run() {
-            Log.i(TAG, "BEGIN mConnectedThread");
-            byte[] buffer = new byte[1024];
-
-            // Keep listening to the InputStream while connected
-            while (true) {
+            try {
+                socket = new DatagramSocket(INPORT);
+            } catch (SocketException e) {
+                e.printStackTrace();
+            }
+            while (!socket.isClosed()) {
                 try {
-                    // Read from the InputStream
-                    int bytes = mmInStream.read(buffer);
-
-                    // Send the obtained bytes to the UI Activity
-                    mHandler.obtainMessage(MESSAGE_READ, bytes, -1, buffer)
-                            .sendToTarget();
+                    byte[] buf = new byte[1024];
+                    DatagramPacket packet = new DatagramPacket(buf, buf.length);
+                    socket.receive(packet);
+                    if(packet.getAddress().getHostAddress().equals(ipAddress)) {
+                        listener.onReceive(
+                                new String(packet.getData(), 0, packet.getLength()),
+                                packet.getAddress().getHostAddress());
+                    }
                 } catch (IOException e) {
-                    Log.e(TAG, "disconnected", e);
+                    e.printStackTrace();
                     connectionLost();
-                    break;
                 }
             }
+            socket.close();
         }
 
         /**
@@ -371,36 +379,27 @@ public class UdpCommandService extends CommandService {
          * @param buffer  The bytes to write
          */
         public void write(byte[] buffer) {
+            if(buffer==null || buffer.length==0)return;
+            DatagramSocket clientSocket = null;
             try {
-                mmOutStream.write(buffer);
-                mmOutStream.flush();
-                // Share the sent message back to the UI Activity
-//                mHandler.obtainMessage(BluetoothChat.MESSAGE_WRITE, -1, -1, buffer)
-//                        .sendToTarget();
+                clientSocket = new DatagramSocket();
+                DatagramPacket sendPacket = new DatagramPacket(buffer, buffer.length, InetAddress.getByName(ipAddress), port);
+                clientSocket.send(sendPacket);
+            } catch (SocketException e) {
+                e.printStackTrace();
+
             } catch (IOException e) {
-                Log.e(TAG, "Exception during write", e);
+                e.printStackTrace();
             }
         }
 
         public void write(int out) {
-            try {
-                mmOutStream.write(out);
-
-                // Share the sent message back to the UI Activity
-//                mHandler.obtainMessage(BluetoothChat.MESSAGE_WRITE, -1, -1, buffer)
-//                        .sendToTarget();
-            } catch (IOException e) {
-                Log.e(TAG, "Exception during write", e);
-            }
+            write(Integer.valueOf(out).byteValue());
         }
 
         public void cancel() {
-            try {
-                mmOutStream.write(EXIT_CMD);
-                mmSocket.close();
-            } catch (IOException e) {
-                Log.e(TAG, "close() of connect socket failed", e);
-            }
+            socket.close();
         }
+
     }
 }
