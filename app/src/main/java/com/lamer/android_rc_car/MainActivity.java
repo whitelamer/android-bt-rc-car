@@ -69,6 +69,7 @@ public class MainActivity extends Activity {
     private static final int RETURN = 0;
     private static final int UP = 1;
     private static final int BREAK = 2;
+    private boolean dataChanget = false;
 
     @Override
     protected void onStart() {
@@ -268,6 +269,7 @@ public class MainActivity extends Activity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 int_acel=progress;
+                dataChanget=true;
             }
 
             @Override
@@ -386,12 +388,13 @@ public class MainActivity extends Activity {
                             mTimer=null;
                             return;
                         }
-                        if(car.getState()==BluetoothCommandService.STATE_CONNECTED){
+                        if(car.getState()==BluetoothCommandService.STATE_CONNECTED && dataChanget){
                             Log.v("mTimer","WRITE");
                             car.write("#1#"+(190-int_angle)+"#2#"+int_acel);
+                            dataChanget=false;
                         }
                     }
-                },200,200);
+                },10,10);
 		}
 		if(connectTimer==null){
 		    connectTimer = new Timer();
@@ -467,6 +470,7 @@ public class MainActivity extends Activity {
 	public void SetSpeed(int a){
 		if(a!=int_acel){
 			int_acel=a;
+            dataChanget = true;
 			//((SeekBar)findViewById(R.id.seekBar1)).setProgress(a+100);
 			//			try {
 			//if(car.getState()!=BluetoothCommandService.STATE_CONNECTED)connectToCar();
@@ -482,13 +486,13 @@ public class MainActivity extends Activity {
 				@SuppressLint("DefaultLocale")
 				@Override
 				public void run() {
-					wheel.setRotation(int_angle-95);
+					wheel.setRotation((int_angle-95)*2);
 					//int acel=((SeekBar)findViewById(R.id.seekBar1)).getProgress();
 					((ToggleButton)findViewById(R.id.toggleButton1)).setText(
 							String.format("%d", int_angle - 95));
 				}
 			});
-
+			dataChanget = true;
 //			Matrix matrix = new Matrix();
 //			wheel.setScaleType(ImageView.ScaleType.MATRIX);   //required
 //			matrix.postRotate(((float) int_angle-95)*2,250,248);// wheel.getWidth()/2, wheel.getHeight()/2+150);
